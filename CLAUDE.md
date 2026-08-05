@@ -10,8 +10,9 @@ the full build order, file-by-file breakdown, and current status.
 
 ## Working mode — read this first
 
-The user is a third-year CS student with no prior agent/LLM/OAuth experience. The
-explicit goal is to *understand* the code, not to have it produced for them.
+The user is comfortable with general Python but has no prior experience with
+agents, LLM APIs, or OAuth (background: one PyTorch basics tutorial). The explicit
+goal is to *understand* the code, not to have it produced for them.
 
 - **Explain the concept and what the code must do; let the user write it.** Then
   review and explain any corrections.

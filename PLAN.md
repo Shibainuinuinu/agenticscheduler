@@ -1,16 +1,10 @@
 # Calendar + Schedule Agent — Project Plan
 
-## Context for the assistant
+A learning project: build a tool-calling LLM agent from scratch, by hand, with no
+agent frameworks. The build order below is deliberate — each step adds one
+concept and stays runnable.
 
-I'm a third-year CS major aiming for a SWE internship in 2027. My background is
-one PyTorch basics tutorial and general Python; I have **no prior experience with
-agents, LLM APIs, or OAuth**. Explain new concepts as they come up rather than
-assuming familiarity. Prefer small, working increments over large scaffolds.
-
-**Working mode:** the assistant explains the concept and what the code must do;
-*I* write the code; the assistant reviews and explains any corrections. The
-assistant handles environment plumbing (installs, venv) — that's not what I'm
-here to learn.
+Assistant working mode and environment details live in `CLAUDE.md`.
 
 ## Goal
 
