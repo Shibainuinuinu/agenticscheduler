@@ -24,7 +24,6 @@ find_free_slots and choose from the slots it returns.
 # JSON Schema of the parameters. It never sees the Python. The description is
 # what makes the model call it correctly, so it is real code, not a comment.
 #
-# One worked example below; add the other three in Step 3.
 TOOLS = [
     {
         "type": "function",
@@ -49,16 +48,87 @@ TOOLS = [
             "required": ["start_date", "end_date"],
         },
     },
-    # TODO Step 3: find_free_slots (start_date, end_date, duration_minutes)
-    #              note its end_date is INCLUSIVE of the last day -- say so here
-    # TODO Step 3: create_event (title, start, end)
-    # TODO Step 3: delete_event (event_id)
+    {
+        "type": "function",
+        "name": "find_free_slots",
+        "description": (
+            "Find free time slots within a date range. "
+            "Dates are ISO 8601, e.g. 2026-08-05 or 2026-08-05T14:00. "
+            "The end bound is inclusive."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "start_date": {
+                    "type": "string",
+                    "description": "Start of the range, ISO 8601.",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "End of the range, ISO 8601, exclusive.",
+                },
+                "duration_minutes": {
+                    "type": "integer",
+                    "description": (
+                        "Minimum duration of the free slot, in minutes."
+                    ),
+                },
+            },
+            "required": ["start_date", "end_date"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "create_event",
+        "description": (
+            "Create a new calendar event. "
+            "Dates are ISO 8601, e.g. 2026-08-05 or 2026-08-05T14:00. "
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Title of the event.",
+                },
+                "start": {
+                    "type": "string",
+                    "description": "Start of the event, ISO 8601.",
+                },
+                "end": {
+                    "type": "string",
+                    "description": "End of the event, ISO 8601.",
+                },
+            },
+            "required": ["title", "start", "end"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "delete_event",
+        "description": (
+            "Delete a calendar event. "
+            "The event is identified by its ID."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "event_id": {
+                    "type": "string",
+                    "description": "ID of the event to delete.",
+                },
+            },
+            "required": ["event_id"],
+        },
+    },
 ]
 
 # Maps the tool name the model uses to the Python function that runs it.
-# TODO: fill in as you add tools above.
 DISPATCH = {
     "list_events": calendar_store.list_events,
+    "find_free_slots": calendar_store.find_free_slots,
+    "create_event": calendar_store.create_event,
+    "delete_event": calendar_store.delete_event 
 }
 
 
@@ -82,7 +152,12 @@ def execute(step) -> dict:
     instead of crashing. Step 5 adds the y/n confirmation for writes. Leave
     both out for now.
     """
-    raise NotImplementedError
+    return {
+        "type": "function_result",
+        "name": step.name,
+        "call_id": step.id,
+        "result": [{"type": "text", "text": json.dumps(DISPATCH[step.name](**step.arguments))}]
+    }
 
 
 def run(user_request: str) -> str:
@@ -105,7 +180,29 @@ def run(user_request: str) -> str:
     history, not the configuration.
     """
     client = genai.Client()  # reads GEMINI_API_KEY from the environment
-    raise NotImplementedError
+    interaction = client.interactions.create(
+        model=MODEL,
+        input=user_request,
+        tools=TOOLS,
+        system_instruction=SYSTEM_INSTRUCTION
+    )
+
+    for _ in range(MAX_STEPS):
+        function_calls = [s for s in interaction.steps if s.type == "function_call"]
+        if not function_calls:
+            return interaction.output_text
+
+        results = [execute(s) for s in function_calls]
+        interaction = client.interactions.create(
+            model=MODEL,
+            input=results,
+            tools=TOOLS,
+            system_instruction=SYSTEM_INSTRUCTION,
+            previous_interaction_id=interaction.id
+        )
+        
+    return f"Ran out of steps ({MAX_STEPS}) without a final answer."
+        
 
 
 if __name__ == "__main__":
