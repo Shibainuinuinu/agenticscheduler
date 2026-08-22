@@ -7,9 +7,11 @@ import json
 import sys
 
 from google import genai
+from dotenv import load_dotenv
 
 import calendar_store
 
+load_dotenv()
 MODEL = "gemini-3.6-flash"
 MAX_STEPS = 10
 
@@ -65,7 +67,7 @@ TOOLS = [
                 },
                 "end_date": {
                     "type": "string",
-                    "description": "End of the range, ISO 8601, exclusive.",
+                    "description": "End of the range, ISO 8601, inclusive.",
                 },
                 "duration_minutes": {
                     "type": "integer",
@@ -74,7 +76,7 @@ TOOLS = [
                     ),
                 },
             },
-            "required": ["start_date", "end_date"],
+            "required": ["start_date", "end_date", "duration_minutes"],
         },
     },
     {
@@ -143,37 +145,29 @@ def execute(step) -> dict:
          "call_id": <step.id>,          # must match, or the model loses track
          "result": [{"type": "text", "text": json.dumps(<your return value>)}]}
 
-    TODO:
-      1. look up step.name in DISPATCH
-      2. call it with **step.arguments
-      3. wrap the return value in the shape above
 
     Step 4 wraps this in try/except and returns the error text as the result
     instead of crashing. Step 5 adds the y/n confirmation for writes. Leave
     both out for now.
     """
+    print(f"Executing {step.name} with arguments {step.arguments}", file=sys.stderr)
+    try:
+        result = DISPATCH[step.name](**step.arguments)
+        text = json.dumps(result)
+        print(f"Result: {text}", file=sys.stderr)
+    except Exception as e:
+        text = json.dumps({"error": str(e)})
+        print(f"Error executing {step.name}: {e}", file=sys.stderr)
+
     return {
         "type": "function_result",
         "name": step.name,
         "call_id": step.id,
-        "result": [{"type": "text", "text": json.dumps(DISPATCH[step.name](**step.arguments))}]
+        "result": [{"type": "text", "text": text}]
     }
-
 
 def run(user_request: str) -> str:
     """Drive the model until it stops asking for tools; return its final text.
-
-    TODO:
-      1. first call: client.interactions.create(
-             model=MODEL, input=user_request, tools=TOOLS,
-             system_instruction=SYSTEM_INSTRUCTION)
-      2. loop up to MAX_STEPS:
-           - pull the function_call steps out of interaction.steps
-           - if there are none, the model answered in words -> return the text
-           - otherwise execute() each one; EVERY call needs exactly ONE result
-           - send the results back as the next `input`, passing
-             previous_interaction_id=interaction.id
-      3. if the loop runs out, say so rather than returning nothing
 
     Note: tools and system_instruction are interaction-scoped -- you must pass
     them on EVERY call, not just the first. previous_interaction_id carries the
