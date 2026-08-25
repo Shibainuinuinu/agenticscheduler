@@ -23,21 +23,56 @@ events. Example requests:
 |---|---|
 | 0. Environment setup | ✅ done — smoke test passes |
 | 1. `calendar_store.py` + `events.json` | ✅ done — all four functions verified in the REPL |
-| 2. Agent loop with `list_events` | ⬜ |
-| 3. Add `find_free_slots` + `create_event` | ⬜ |
-| 4. Step limits, error handling, trace log | ⬜ |
-| 5. Confirmation before writes | ⬜ |
+| 2. Agent loop with `list_events` | ✅ done — checkpoint passes |
+| 3. Add `find_free_slots` + `create_event` | ✅ done — all four tools wired |
+| 4. Step limits, error handling, trace log | ✅ done — recovers from a bad date |
+| 5. Confirmation before writes | ⬜ ← **next** |
 | 6. Offline tests | ⬜ |
 | 7. Real Google Calendar (OAuth) | ⬜ |
 | 8. Learned scheduling profile | ⬜ — designed, not started |
 
-Done so far: Python 3.13.14 installed, `.venv` created, `google-genai` installed,
-git initialized, `.gitignore` written. `events.json` written. `list_events`,
-`create_event`, `delete_event` written and working.
+Done so far: environment, `.venv`, `google-genai`, git, `.gitignore`. `events.json`
+written. `calendar_store.py` complete. **`agent.py` complete through Step 4** —
+tool schemas for all four tools, `execute()` dispatch with a trace log and
+try/except, and the `run()` loop bounded by `MAX_STEPS`.
 
-**Current task — Step 2, the agent loop.** `calendar_store.py` is complete and
-verified against nested, overlapping, back-to-back, empty-day, and cross-midnight
-cases.
+**Current task — Step 5, confirmation before writes.**
+
+### Verified end to end (2026-08-24)
+
+All three example requests from the Goal section now work unattended:
+
+- *"What's on my Wednesday?"* → one `list_events` call, correct answer.
+- *"Find me two hours for deep work this week and block it."* →
+  `find_free_slots` then `create_event`. The multi-turn tool chain works.
+- *"Move my Thursday afternoon meeting to Friday morning."* → `list_events`,
+  `find_free_slots`, `create_event`, `delete_event` across several turns.
+- Bad date (`2026-13-45`) → `execute()` returns the exception text as the
+  function result, the model reads it and explains the problem in words. No
+  crash. Step 4's self-correction claim is proven, not assumed.
+
+### Open issues found while testing
+
+1. **`find_free_slots` ignores the time-of-day part of its bounds.** Asked for
+   `09:15`–`12:45`, it returned `09:00`–`17:00`. The day-bounds `.replace(hour=…)`
+   from Step 1 discards any time component, but the tool *description* advertises
+   `2026-08-05T14:00` as valid input — so the model passes times and silently
+   gets a wider window than it asked for. The contract and the code disagree.
+   Fix one of them: either clamp the first/last day to the given times, or drop
+   times from the description and accept dates only.
+2. **Weekends are offered as free time.** `find_free_slots` has no weekday
+   filter, so Saturday and Sunday come back as wide-open. Arguably correct for a
+   mechanical gap finder — narrowing is Step 8's job — but worth a decision.
+3. **The model still does a little timestamp arithmetic.** Given a 2.5-hour gap
+   and asked for two hours, it emitted `14:00`–`16:00` — it sliced the gap
+   itself. Unavoidable while `find_free_slots` returns whole gaps, and it is
+   arithmetic over values the code produced rather than invention. Note it and
+   move on.
+4. **`SYSTEM_INSTRUCTION` hardcodes `Today is 2026-08-04`.** Fine for a fixture
+   calendar; becomes wrong the moment the real calendar lands in Step 7.
+5. **A "move" is delete + create, so it is not atomic.** If `delete_event` fails
+   after `create_event` succeeds, the event exists twice. Relevant to Step 5:
+   the confirmation gate should cover the pair, not each call blindly.
 
 One contract worth remembering: **`find_free_slots`'s `end_date` is inclusive of
 the whole final day; `list_events`'s is exclusive.** They deliberately differ, and
@@ -49,16 +84,15 @@ this — everything now parses before comparing.
 
 ## The files, and what each one is for
 
-Nothing here exists yet except `.gitignore` and this file. Each gets created at
-the step listed.
+Each file is listed with the step that created it.
 
 | File | Created in | What it is |
 |---|---|---|
 | `.gitignore` | ✅ done | Tells git to ignore `.venv/`, `__pycache__/`, `.env` — things that shouldn't be in version control |
 | `smoke.py` | ✅ done | Six lines. Proves the API key and install work *before* any agent complexity exists. Throwaway. |
 | `events.json` | ✅ done | Fake calendar data. A JSON list of events. This is the "database". |
-| `calendar_store.py` | 🔨 Step 1 | The four calendar operations, reading/writing `events.json`. **Zero LLM code.** Later swapped for real Google Calendar without the agent noticing. |
-| `agent.py` | Step 2 | The agent loop, the tool schemas, and the dispatch function. The heart of the project. |
+| `calendar_store.py` | ✅ Step 1 | The four calendar operations, reading/writing `events.json`. **Zero LLM code.** Later swapped for real Google Calendar without the agent noticing. |
+| `agent.py` | ✅ Steps 2–4 | The agent loop, the tool schemas, and the dispatch function. The heart of the project. |
 | `test_agent.py` | Step 6 | Tests that run offline using a fake model, so the suite costs nothing and never flakes on the network. |
 | `scheduling.py` | Step 8 | Ranks and filters the raw gaps from `find_free_slots` using the learned profile. Policy, not storage — deliberately *not* in `calendar_store.py`. |
 | `profile.json` | Step 8 | The learned artifact: per-weekday working hours, buffers, title labels. Hand-editable. |
@@ -220,7 +254,7 @@ back-to-back, empty-day, and cross-midnight cases all verified. Still no agent.
 
 ---
 
-## Step 2 — The agent loop, `list_events` only
+## Step 2 ✅ — The agent loop, `list_events` only
 
 New file `agent.py`. This is the main learning objective.
 
@@ -267,7 +301,7 @@ Key ideas:
 
 ---
 
-## Step 3 — Add `find_free_slots` and `create_event`
+## Step 3 ✅ — Add `find_free_slots` and `create_event`
 
 Mechanical once the loop is right — this is the payoff. If the model starts
 inventing timestamps, the fix is a more prescriptive tool description, not loop code.
@@ -276,7 +310,7 @@ inventing timestamps, the fix is a more prescriptive tool description, not loop 
 
 ---
 
-## Step 4 — Robustness
+## Step 4 ✅ — Robustness
 
 - `MAX_STEPS = 10` so a confused model can't loop forever.
 - Wrap `execute()` in try/except. On exception, **return the error text as the
@@ -287,7 +321,7 @@ inventing timestamps, the fix is a more prescriptive tool description, not loop 
 
 ---
 
-## Step 5 — Confirmation before writes
+## Step 5 — Confirmation before writes  ← next
 
 Gate `create_event` and `delete_event` behind a y/n prompt inside `execute()`. On
 "n", return a normal (non-error) result saying the user declined.
