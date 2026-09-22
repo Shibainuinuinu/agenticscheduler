@@ -133,6 +133,9 @@ DISPATCH = {
     "delete_event": calendar_store.delete_event 
 }
 
+# Tools that change the calendar. These need a y/n from the user first.
+WRITE_TOOLS = {"create_event", "delete_event"}
+
 
 def execute(step) -> dict:
     """Run one function_call step and build the function_result to send back.
@@ -146,11 +149,25 @@ def execute(step) -> dict:
          "result": [{"type": "text", "text": json.dumps(<your return value>)}]}
 
 
-    Step 4 wraps this in try/except and returns the error text as the result
-    instead of crashing. Step 5 adds the y/n confirmation for writes. Leave
-    both out for now.
+    Errors are returned as the result instead of crashing, so the model can
+    self-correct. Write tools need a y/n from the user before they run.
     """
     print(f"Executing {step.name} with arguments {step.arguments}", file=sys.stderr)
+
+    if step.name in WRITE_TOOLS:
+        answer = input(f"Allow {step.name} {step.arguments}? [y/n] ")
+        if answer.strip().lower() != "y":
+            # Declining is a normal result, not an error: an error would
+            # invite the model to retry with different arguments.
+            return {
+                "type": "function_result",
+                "name": step.name,
+                "call_id": step.id,
+                "result": [{"type": "text", "text": json.dumps(
+                    {"declined": "The user declined. Nothing was changed."}
+                )}],
+            }
+
     try:
         result = DISPATCH[step.name](**step.arguments)
         text = json.dumps(result)
