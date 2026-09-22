@@ -5,6 +5,7 @@ Run:  .venv/Scripts/python.exe agent.py "what's on my Wednesday?"
 
 import json
 import sys
+from datetime import date
 
 from google import genai
 from dotenv import load_dotenv
@@ -15,11 +16,12 @@ load_dotenv()
 MODEL = "gemini-3.6-flash"
 MAX_STEPS = 10
 
-SYSTEM_INSTRUCTION = """\
-You are a scheduling assistant. Today is 2026-08-04.
 
-Never compute or invent timestamps yourself. To find free time, call
-find_free_slots and choose from the slots it returns.
+def get_system_prompt():
+    return f"""\
+You are a scheduling assistant. Today is {date.today().strftime("%A, %Y-%m-%d")}.
+Never compute or invent timestamps yourself.
+To find free time, call find_free_slots and choose from the slots it returns.
 """
 
 # The model sees ONLY these three things per tool -- name, description, and the
@@ -55,7 +57,7 @@ TOOLS = [
         "name": "find_free_slots",
         "description": (
             "Find free time slots within a date range. "
-            "Dates are ISO 8601, e.g. 2026-08-05 or 2026-08-05T14:00. "
+            "Dates only, e.g. 2026-08-05. "
             "The end bound is inclusive."
         ),
         "parameters": {
@@ -63,11 +65,11 @@ TOOLS = [
             "properties": {
                 "start_date": {
                     "type": "string",
-                    "description": "Start of the range, ISO 8601.",
+                    "description": "Start date, YYYY-MM-DD.",
                 },
                 "end_date": {
                     "type": "string",
-                    "description": "End of the range, ISO 8601, inclusive.",
+                    "description": "End date, YYYY-MM-DD, inclusive.",
                 },
                 "duration_minutes": {
                     "type": "integer",
@@ -190,12 +192,13 @@ def run(user_request: str) -> str:
     them on EVERY call, not just the first. previous_interaction_id carries the
     history, not the configuration.
     """
+    system_instruction = get_system_prompt()
     client = genai.Client()  # reads GEMINI_API_KEY from the environment
     interaction = client.interactions.create(
         model=MODEL,
         input=user_request,
         tools=TOOLS,
-        system_instruction=SYSTEM_INSTRUCTION
+        system_instruction=system_instruction
     )
 
     for _ in range(MAX_STEPS):
@@ -208,7 +211,7 @@ def run(user_request: str) -> str:
             model=MODEL,
             input=results,
             tools=TOOLS,
-            system_instruction=SYSTEM_INSTRUCTION,
+            system_instruction=system_instruction,
             previous_interaction_id=interaction.id
         )
         

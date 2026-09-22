@@ -26,17 +26,19 @@ events. Example requests:
 | 2. Agent loop with `list_events` | ✅ done — checkpoint passes |
 | 3. Add `find_free_slots` + `create_event` | ✅ done — all four tools wired |
 | 4. Step limits, error handling, trace log | ✅ done — recovers from a bad date |
-| 5. Confirmation before writes | ⬜ ← **next** |
-| 6. Offline tests | ⬜ |
-| 7. Real Google Calendar (OAuth) | ⬜ |
+| 5. Confirmation before writes | ✅ done — y/n gate on `create_event` / `delete_event` |
+| 6. Offline tests | ⏭️ skipped — verifying by hand instead |
+| 7. Real Google Calendar (OAuth) | ⬜ ← **next** |
 | 8. Learned scheduling profile | ⬜ — designed, not started |
 
 Done so far: environment, `.venv`, `google-genai`, git, `.gitignore`. `events.json`
-written. `calendar_store.py` complete. **`agent.py` complete through Step 4** —
-tool schemas for all four tools, `execute()` dispatch with a trace log and
-try/except, and the `run()` loop bounded by `MAX_STEPS`.
+written. `calendar_store.py` complete. **`agent.py` complete through Step 5** —
+tool schemas for all four tools, `execute()` dispatch with a trace log,
+try/except, and a y/n gate on writes, and the `run()` loop bounded by
+`MAX_STEPS`. `smoke.py` deleted — `agent.py` now proves the setup.
 
-**Current task — Step 5, confirmation before writes.**
+**Current task — Step 7, real Google Calendar.** Fix open issues 1 and 4
+first (see below).
 
 ### Verified end to end (2026-08-24)
 
