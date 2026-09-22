@@ -4,7 +4,17 @@ import json
 import uuid
 from pathlib import Path
 
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+
+CALENDAR_ID="5ca24ad20cdd8874bb400f893d20993a1f5ae7c8e77b4466f3c0f19510d8b22d@group.calendar.google.com"
 EVENTS_FILE = Path(__file__).parent / "events.json"
+TOKEN_FILE = Path(__file__).parent / "token.json"
+CREDENTIALS_FILE = Path(__file__).parent / "credentials.json"
+# Read and write events only -- nothing else in the Google account.
+SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 WORK_START_HOUR = 9
 WORK_END_HOUR = 17
 
@@ -12,6 +22,29 @@ WORK_END_HOUR = 17
 Event = dict[str, str]
 # A candidate gap: only start and end. No id, no title — it doesn't exist yet.
 Slot = dict[str, str]
+
+
+def _get_service():
+    """A logged-in Google Calendar client.
+
+    First run opens a browser to log in and saves the token to token.json.
+    Later runs reuse the token, refreshing it silently when it expires.
+    """
+    creds = None
+    if TOKEN_FILE.exists():
+        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(CREDENTIALS_FILE), SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+        TOKEN_FILE.write_text(creds.to_json())
+
+    return build("calendar", "v3", credentials=creds)
 
 
 def list_events(start_date: str, end_date: str) -> list[Event]:

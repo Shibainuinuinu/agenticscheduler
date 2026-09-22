@@ -10,29 +10,37 @@ the full build order, file-by-file breakdown, and current status.
 
 ## Working mode — read this first
 
-The user is comfortable with general Python but has no prior experience with
-agents, LLM APIs, or OAuth (background: one PyTorch basics tutorial). The explicit
-goal is to *understand* the code, not to have it produced for them.
+The user is a third-year CS major: solid on Python and general CS fundamentals,
+newer to agents, LLM APIs, and OAuth. The goal is to *understand* the system —
+its design and the reasoning behind it — not to memorize syntax.
 
-- **Explain the concept and what the code must do; let the user write it.** Then
-  review and explain any corrections.
-- **Do not write implementation files** (`calendar_store.py`, `agent.py`,
-  `test_agent.py`) unless the user directly asks.
-- **Do handle environment plumbing** — installs, venv, package management. That
-  isn't what they're here to learn.
-- Explain new concepts as they come up; assume no familiarity with LLM APIs.
-- Prefer small working increments over large scaffolds.
+- **Claude may write the code**, including `calendar_store.py` and `agent.py`.
+  Rote syntax and API boilerplate aren't the learning target.
+- **The learning target is design.** When writing or changing code, surface the
+  decisions that matter: why this boundary, what the alternatives were, what
+  the trade-off is, what breaks later if we choose wrong. Invite discussion on
+  those before or alongside the code, rather than only explaining after.
+- **Walk through what was written** — the shape and the non-obvious lines, not
+  every line. Confirm the user understands the parts that carry weight.
+- When the user writes code themselves, review it and explain corrections.
+- **Do handle environment plumbing** — installs, venv, git, package management.
+- Explain new concepts (LLM APIs, OAuth, Google's API model) as they come up.
+- Prefer small working increments over large scaffolds; keep each one runnable.
+- Record design decisions in `PLAN.md` as they're made.
 
 ## Environment
 
-- Windows 10, **Git Bash** (not PowerShell/cmd) is the user's shell
-- Python 3.13.14 at `%LOCALAPPDATA%\Programs\Python\Python313`
-- venv at `.venv/` — Windows layout, so `.venv/Scripts/` not `.venv/bin/`
-- Run scripts with `.venv/Scripts/python.exe <script>`, or
-  `source .venv/Scripts/activate` first
+The project is worked on from two machines. Each has its own `.venv/`
+(gitignored), so the layouts differ:
 
-A Python 3.10 also exists on the machine. Only 3.13 is on PATH; the venv makes it
-moot.
+| | macOS (zsh) | Windows 10 (Git Bash) |
+|---|---|---|
+| Python | 3.11.5 | 3.13.14 |
+| Run | `.venv/bin/python <script>` | `.venv/Scripts/python.exe <script>` |
+
+Code must run on 3.11 — avoid 3.12+ only features. Editor settings
+(`.vscode/`) are per-machine and gitignored. Pull before starting on either
+machine; the other may have pushed.
 
 ## Provider
 
@@ -69,7 +77,11 @@ Other invariants:
   model.** The model chooses among options the code produced; it does not compute
   timestamps.
 - **No agent frameworks.** The loop is written by hand on purpose.
-- Events are naive local ISO strings; timezone-awareness is deferred to Step 7.
+- Events are naive local ISO strings at the `calendar_store.py` boundary. Step 7
+  converts to/from Google's offset-aware times *inside* the store, so
+  `agent.py` never sees a timezone.
+- While developing Step 7, the store targets the "Agent Sandbox" calendar via
+  `CALENDAR_ID`, never `"primary"`. OAuth scope is `calendar.events` only.
 - The file is `calendar_store.py`, never `calendar.py` — the latter shadows the
   Python stdlib `calendar` module.
 - **Personalization is policy, not storage.** Learned scheduling preferences live
@@ -87,6 +99,10 @@ Other invariants:
 
 ## Conventions
 
-- Secrets come from environment variables. Never hardcode a key, never commit one.
-- `.gitignore` covers `.venv/`, `__pycache__/`, `.env`.
-- Tests use a stubbed client and must run offline with no network calls.
+- Secrets come from environment variables or gitignored files. Never hardcode a
+  key, never commit one. Never print the contents of `credentials.json` or
+  `token.json`.
+- `.gitignore` covers `.venv/`, `__pycache__/`, `.env`, `.vscode/`,
+  `credentials.json`, `token.json`.
+- Offline tests (Step 6) were skipped by the user's choice; verification is by
+  hand. Don't reintroduce them unless asked.

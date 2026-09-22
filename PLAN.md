@@ -28,17 +28,21 @@ events. Example requests:
 | 4. Step limits, error handling, trace log | ✅ done — recovers from a bad date |
 | 5. Confirmation before writes | ✅ done — y/n gate on `create_event` / `delete_event` |
 | 6. Offline tests | ⏭️ skipped — verifying by hand instead |
-| 7. Real Google Calendar (OAuth) | ⬜ ← **next** |
+| 7. Real Google Calendar (OAuth) | 🔨 in progress — OAuth wired, functions not yet swapped |
 | 8. Learned scheduling profile | ⬜ — designed, not started |
 
 Done so far: environment, `.venv`, `google-genai`, git, `.gitignore`. `events.json`
 written. `calendar_store.py` complete. **`agent.py` complete through Step 5** —
 tool schemas for all four tools, `execute()` dispatch with a trace log,
 try/except, and a y/n gate on writes, and the `run()` loop bounded by
-`MAX_STEPS`. `smoke.py` deleted — `agent.py` now proves the setup.
+`MAX_STEPS`. `smoke.py` deleted — `agent.py` now proves the setup. Open
+issues 1 and 4 fixed ahead of Step 7.
 
-**Current task — Step 7, real Google Calendar.** Fix open issues 1 and 4
-first (see below).
+**Current task — Step 7, real Google Calendar.** Google Cloud project, OAuth
+client (`credentials.json`), and an "Agent Sandbox" test calendar are set up.
+`_get_service()` is written in `calendar_store.py`. Next: run the first login
+(creates `token.json`), inspect a raw Google event, then write `_to_event()`
+and swap `list_events`. See the Step 7 section for the sub-order.
 
 ### Verified end to end (2026-08-24)
 
@@ -55,7 +59,9 @@ All three example requests from the Goal section now work unattended:
 
 ### Open issues found while testing
 
-1. **`find_free_slots` ignores the time-of-day part of its bounds.** Asked for
+1. ✅ **Fixed** — tool description now says dates only (`YYYY-MM-DD`); the
+   code was left alone since `calendar_store.py` is rewritten in Step 7.
+   **`find_free_slots` ignores the time-of-day part of its bounds.** Asked for
    `09:15`–`12:45`, it returned `09:00`–`17:00`. The day-bounds `.replace(hour=…)`
    from Step 1 discards any time component, but the tool *description* advertises
    `2026-08-05T14:00` as valid input — so the model passes times and silently
@@ -70,7 +76,11 @@ All three example requests from the Goal section now work unattended:
    itself. Unavoidable while `find_free_slots` returns whole gaps, and it is
    arithmetic over values the code produced rather than invention. Note it and
    move on.
-4. **`SYSTEM_INSTRUCTION` hardcodes `Today is 2026-08-04`.** Fine for a fixture
+4. ✅ **Fixed** — `get_system_prompt()` builds `Today is Monday, 2026-09-21`
+   from `date.today()`, computed once per `run()` so every turn of one request
+   agrees on what "tomorrow" means. Weekday included so the model doesn't
+   derive it. Fixed *before* Step 7 because the fix lives in `agent.py`.
+   **`SYSTEM_INSTRUCTION` hardcodes `Today is 2026-08-04`.** Fine for a fixture
    calendar; becomes wrong the moment the real calendar lands in Step 7.
 5. **A "move" is delete + create, so it is not atomic.** If `delete_event` fails
    after `create_event` succeeds, the event exists twice. Relevant to Step 5:
@@ -90,12 +100,14 @@ Each file is listed with the step that created it.
 
 | File | Created in | What it is |
 |---|---|---|
-| `.gitignore` | ✅ done | Tells git to ignore `.venv/`, `__pycache__/`, `.env` — things that shouldn't be in version control |
-| `smoke.py` | ✅ done | Six lines. Proves the API key and install work *before* any agent complexity exists. Throwaway. |
+| `.gitignore` | ✅ done | Ignores `.venv/`, `__pycache__/`, `.env`, `.vscode/`, `credentials.json`, `token.json` |
+| `smoke.py` | 🗑️ deleted | Proved the API key and install worked before any agent code existed. Retired once `agent.py` ran end to end. |
 | `events.json` | ✅ done | Fake calendar data. A JSON list of events. This is the "database". |
 | `calendar_store.py` | ✅ Step 1 | The four calendar operations, reading/writing `events.json`. **Zero LLM code.** Later swapped for real Google Calendar without the agent noticing. |
-| `agent.py` | ✅ Steps 2–4 | The agent loop, the tool schemas, and the dispatch function. The heart of the project. |
-| `test_agent.py` | Step 6 | Tests that run offline using a fake model, so the suite costs nothing and never flakes on the network. |
+| `agent.py` | ✅ Steps 2–5 | The agent loop, the tool schemas, and the dispatch function. The heart of the project. |
+| `test_agent.py` | ⏭️ skipped | Tests that run offline using a fake model, so the suite costs nothing and never flakes on the network. |
+| `credentials.json` | ✅ Step 7 | OAuth client ID (Desktop app) from Google Cloud. Identifies the *app*, not the user. **Secret, gitignored.** |
+| `token.json` | Step 7 | Created by `_get_service()` on first login. Proves the *user* granted access. **Secret, gitignored.** Delete it to force a fresh login. |
 | `scheduling.py` | Step 8 | Ranks and filters the raw gaps from `find_free_slots` using the learned profile. Policy, not storage — deliberately *not* in `calendar_store.py`. |
 | `profile.json` | Step 8 | The learned artifact: per-weekday working hours, buffers, title labels. Hand-editable. |
 
@@ -341,6 +353,62 @@ No network in the test suite — so it's free, fast, and deterministic.
 
 Only after everything above is green. **Only `calendar_store.py` changes.** If
 `agent.py` needs edits, the abstraction in Step 1 was wrong.
+
+**Refactor, don't add.** The four functions keep their names, arguments, and
+return shapes; only their bodies change. Each becomes a *translator*: our naive
+ISO strings in → Google's format → call Google → Google's answer back into our
+`{id, title, start, end}` shape. The old JSON version stays in git history.
+
+### Setup (done)
+
+- Google Cloud project, Calendar API enabled, consent screen in **Testing**
+  mode with the user's Gmail as a test user.
+- OAuth client of type **Desktop app** → `credentials.json`.
+- Libraries: `google-api-python-client`, `google-auth-oauthlib`,
+  `google-auth-httplib2`.
+- **"Agent Sandbox" calendar**, used via `CALENDAR_ID` instead of `"primary"`,
+  so a buggy `delete_event` or a misread "clear my week" can only destroy test
+  events. Going live is a one-constant change.
+
+### Design decisions
+
+- **Scope `calendar.events`** — read/write events, nothing else in the account.
+  Least privilege. Consequence: `calendarList()` is *not* permitted, so test
+  with `events().list(calendarId=CALENDAR_ID)`.
+- **Two layers of identity.** Credentials answer *who* (once, in
+  `_get_service()`); `calendarId` answers *which calendar* (every call). The
+  service object is bound to the account, not to a calendar.
+- **`_get_service()` has three cases:** valid token → use it; expired with a
+  refresh token → refresh silently; nothing usable → browser login. Save
+  `token.json` after either of the last two.
+- **The service is lazy.** `events().list(...)` builds a request;
+  `.execute()` sends it. Methods are generated at runtime from Google's
+  discovery document, so Pylance can't autocomplete them.
+
+### Sub-order
+
+1. ✅ `_get_service()`
+2. ⬜ First login; print one raw event in the REPL to learn the real shape
+3. ⬜ `_to_event(item)` — Google event → our `Event` dict
+4. ⬜ Swap `list_events` (read-only, safe first)
+5. ⬜ Swap `create_event`, then `delete_event`
+
+`find_free_slots` needs **no changes** — it already gets its events from
+`list_events`, so the cursor walk carries over untouched. That's the payoff of
+the Step 1 boundary.
+
+### Known hazards
+
+- **Timezones arrive here.** Google requires offset-aware RFC 3339 times; our
+  contract is naive local strings. Convert naive → local tz on the way in,
+  strip on the way out, so `agent.py` never sees an offset.
+- **All-day events** have `start.date` instead of `start.dateTime`.
+  `_to_event` must handle both or it crashes on the first birthday.
+- **`delete_event` on a missing id** raises Google's `HttpError` (404/410) —
+  this matches the frozen contract ("raises if not found"), so let it raise.
+- **Testing-mode tokens expire after ~7 days.** Delete `token.json` and log in
+  again. The "unverified app" warning on login is expected.
+- `events.json` becomes a dead fixture once all four are swapped.
 
 ---
 
